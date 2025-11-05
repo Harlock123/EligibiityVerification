@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "GMsZG11Qcng=",
+  "dgSpecHash": "pS0D6Uv6lTU=",
   "success": true,
-  "projectFilePath": "/home/lwatson/RiderProjects/Elig/Elig.Services/Elig.Services.csproj",
+  "projectFilePath": "/home/lwatson/RiderProjects/EligibilityVerification/Elig.Services/Elig.Services.csproj",
   "expectedPackageFiles": [
     "/home/lwatson/.nuget/packages/azure.core/1.38.0/azure.core.1.38.0.nupkg.sha512",
     "/home/lwatson/.nuget/packages/azure.identity/1.11.4/azure.identity.1.11.4.nupkg.sha512",

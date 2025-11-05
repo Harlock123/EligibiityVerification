@@ -4685,11 +4685,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "/home/lwatson/RiderProjects/Elig/Elig.Data/Elig.Data.csproj",
+      "projectUniqueName": "/home/lwatson/RiderProjects/EligibilityVerification/Elig.Data/Elig.Data.csproj",
       "projectName": "Elig.Data",
-      "projectPath": "/home/lwatson/RiderProjects/Elig/Elig.Data/Elig.Data.csproj",
+      "projectPath": "/home/lwatson/RiderProjects/EligibilityVerification/Elig.Data/Elig.Data.csproj",
       "packagesPath": "/home/lwatson/.nuget/packages/",
-      "outputPath": "/home/lwatson/RiderProjects/Elig/Elig.Data/obj/",
+      "outputPath": "/home/lwatson/RiderProjects/EligibilityVerification/Elig.Data/obj/",
       "projectStyle": "PackageReference",
       "configFilePaths": [
         "/home/lwatson/.nuget/NuGet/NuGet.Config"

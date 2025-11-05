@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "/home/lwatson/RiderProjects/Elig/Elig.Services/Elig.Services.csproj": {}
+    "/home/lwatson/RiderProjects/EligibilityVerification/Elig.Services/Elig.Services.csproj": {}
   },
   "projects": {
-    "/home/lwatson/RiderProjects/Elig/Elig.Data/Elig.Data.csproj": {
+    "/home/lwatson/RiderProjects/EligibilityVerification/Elig.Data/Elig.Data.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "/home/lwatson/RiderProjects/Elig/Elig.Data/Elig.Data.csproj",
+        "projectUniqueName": "/home/lwatson/RiderProjects/EligibilityVerification/Elig.Data/Elig.Data.csproj",
         "projectName": "Elig.Data",
-        "projectPath": "/home/lwatson/RiderProjects/Elig/Elig.Data/Elig.Data.csproj",
+        "projectPath": "/home/lwatson/RiderProjects/EligibilityVerification/Elig.Data/Elig.Data.csproj",
         "packagesPath": "/home/lwatson/.nuget/packages/",
-        "outputPath": "/home/lwatson/RiderProjects/Elig/Elig.Data/obj/",
+        "outputPath": "/home/lwatson/RiderProjects/EligibilityVerification/Elig.Data/obj/",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "/home/lwatson/.nuget/NuGet/NuGet.Config"
@@ -79,14 +79,14 @@
         }
       }
     },
-    "/home/lwatson/RiderProjects/Elig/Elig.Services/Elig.Services.csproj": {
+    "/home/lwatson/RiderProjects/EligibilityVerification/Elig.Services/Elig.Services.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "/home/lwatson/RiderProjects/Elig/Elig.Services/Elig.Services.csproj",
+        "projectUniqueName": "/home/lwatson/RiderProjects/EligibilityVerification/Elig.Services/Elig.Services.csproj",
         "projectName": "Elig.Services",
-        "projectPath": "/home/lwatson/RiderProjects/Elig/Elig.Services/Elig.Services.csproj",
+        "projectPath": "/home/lwatson/RiderProjects/EligibilityVerification/Elig.Services/Elig.Services.csproj",
         "packagesPath": "/home/lwatson/.nuget/packages/",
-        "outputPath": "/home/lwatson/RiderProjects/Elig/Elig.Services/obj/",
+        "outputPath": "/home/lwatson/RiderProjects/EligibilityVerification/Elig.Services/obj/",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "/home/lwatson/.nuget/NuGet/NuGet.Config"
@@ -101,8 +101,8 @@
           "net9.0": {
             "targetAlias": "net9.0",
             "projectReferences": {
-              "/home/lwatson/RiderProjects/Elig/Elig.Data/Elig.Data.csproj": {
-                "projectPath": "/home/lwatson/RiderProjects/Elig/Elig.Data/Elig.Data.csproj"
+              "/home/lwatson/RiderProjects/EligibilityVerification/Elig.Data/Elig.Data.csproj": {
+                "projectPath": "/home/lwatson/RiderProjects/EligibilityVerification/Elig.Data/Elig.Data.csproj"
               }
             }
           }
