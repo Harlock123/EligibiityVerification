@@ -1,0 +1,15 @@
+/home/lwatson/RiderProjects/Elig/Elig.Services/obj/Debug/net9.0/Elig.Services.csproj.AssemblyReference.cache
+/home/lwatson/RiderProjects/Elig/Elig.Services/obj/Debug/net9.0/Elig.Services.GeneratedMSBuildEditorConfig.editorconfig
+/home/lwatson/RiderProjects/Elig/Elig.Services/obj/Debug/net9.0/Elig.Services.AssemblyInfoInputs.cache
+/home/lwatson/RiderProjects/Elig/Elig.Services/obj/Debug/net9.0/Elig.Services.AssemblyInfo.cs
+/home/lwatson/RiderProjects/Elig/Elig.Services/obj/Debug/net9.0/Elig.Services.csproj.CoreCompileInputs.cache
+/home/lwatson/RiderProjects/Elig/Elig.Services/bin/Debug/net9.0/Elig.Services.deps.json
+/home/lwatson/RiderProjects/Elig/Elig.Services/bin/Debug/net9.0/Elig.Services.dll
+/home/lwatson/RiderProjects/Elig/Elig.Services/bin/Debug/net9.0/Elig.Services.pdb
+/home/lwatson/RiderProjects/Elig/Elig.Services/bin/Debug/net9.0/Elig.Data.dll
+/home/lwatson/RiderProjects/Elig/Elig.Services/bin/Debug/net9.0/Elig.Data.pdb
+/home/lwatson/RiderProjects/Elig/Elig.Services/obj/Debug/net9.0/Elig.Ser.6FBA9F9B.Up2Date
+/home/lwatson/RiderProjects/Elig/Elig.Services/obj/Debug/net9.0/Elig.Services.dll
+/home/lwatson/RiderProjects/Elig/Elig.Services/obj/Debug/net9.0/refint/Elig.Services.dll
+/home/lwatson/RiderProjects/Elig/Elig.Services/obj/Debug/net9.0/Elig.Services.pdb
+/home/lwatson/RiderProjects/Elig/Elig.Services/obj/Debug/net9.0/ref/Elig.Services.dll
