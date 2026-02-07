@@ -25,6 +25,7 @@ public class EligibilityDbContext : DbContext
     public DbSet<EligibilityRequest> EligibilityRequests { get; set; }
     public DbSet<EligibilityResponse> EligibilityResponses { get; set; }
     public DbSet<BenefitDetail> BenefitDetails { get; set; }
+    public DbSet<RequestBatch> RequestBatches { get; set; }
 
     // Audit/Tracking Tables
     public DbSet<RequestStatusHistory> RequestStatusHistories { get; set; }
@@ -203,6 +204,31 @@ public class EligibilityDbContext : DbContext
             entity.HasOne(e => e.Provider).WithMany(e => e.EligibilityRequests).HasForeignKey(e => e.ProviderId);
             entity.HasOne(e => e.Payer).WithMany(e => e.EligibilityRequests).HasForeignKey(e => e.PayerId);
             entity.HasOne(e => e.RequestStatus).WithMany(e => e.EligibilityRequests).HasForeignKey(e => e.RequestStatusCode);
+            entity.HasOne(e => e.RequestBatch).WithMany(e => e.Requests).HasForeignKey(e => e.RequestBatchId);
+        });
+
+        // Configure RequestBatch
+        modelBuilder.Entity<RequestBatch>(entity =>
+        {
+            entity.ToTable("request_batch");
+            entity.HasKey(e => e.RequestBatchId);
+            entity.Property(e => e.RequestBatchId).HasColumnName("request_batch_id").ValueGeneratedOnAdd();
+            entity.Property(e => e.FileName).HasColumnName("file_name").HasMaxLength(200);
+            entity.Property(e => e.SenderId).HasColumnName("sender_id").HasMaxLength(15).IsRequired();
+            entity.Property(e => e.ReceiverId).HasColumnName("receiver_id").HasMaxLength(15).IsRequired();
+            entity.Property(e => e.PayerId).HasColumnName("payer_id").IsRequired();
+            entity.Property(e => e.ProviderId).HasColumnName("provider_id").IsRequired();
+            entity.Property(e => e.InterchangeControlNumber).HasColumnName("interchange_control_number").HasMaxLength(15).IsRequired();
+            entity.Property(e => e.GroupControlNumber).HasColumnName("group_control_number").HasMaxLength(15).IsRequired();
+            entity.Property(e => e.TransactionControlNumber).HasColumnName("transaction_control_number").HasMaxLength(9).IsRequired();
+            entity.Property(e => e.RequestCount).HasColumnName("request_count").IsRequired();
+            entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20).HasDefaultValue("QUEUED");
+            entity.Property(e => e.Raw270Data).HasColumnName("raw_270_data");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("GETDATE()");
+            entity.Property(e => e.SubmittedAt).HasColumnName("submitted_at");
+
+            entity.HasOne(e => e.Payer).WithMany().HasForeignKey(e => e.PayerId);
+            entity.HasOne(e => e.Provider).WithMany().HasForeignKey(e => e.ProviderId);
         });
 
         // Configure EligibilityResponse

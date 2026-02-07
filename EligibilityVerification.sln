@@ -1,13 +1,21 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.0.31903.59
+# Visual Studio Version 18
+VisualStudioVersion = 18.2.11408.102 d18.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Elig.Data", "Elig.Data\Elig.Data.csproj", "{F618C21F-22B6-4604-8A89-E00060F1E59B}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Elig.Services", "Elig.Services\Elig.Services.csproj", "{589F1B9B-29B2-4A51-9A10-47BD04DDD199}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Elig.Console", "Elig.Console\Elig.Console.csproj", "{A5D921F0-E321-41C5-BB88-D007ED08212F}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{74C3381F-912B-4985-AA17-2B4EB72AB2F2}"
+	ProjectSection(SolutionItems) = preProject
+		DBScripts\eligibility_verification_schema.sql = DBScripts\eligibility_verification_schema.sql
+		DBScripts\eligibility_verification_schema_mssql.sql = DBScripts\eligibility_verification_schema_mssql.sql
+		DBScripts\sample_queries.sql = DBScripts\sample_queries.sql
+		DBScripts\sample_queries_mssql.sql = DBScripts\sample_queries_mssql.sql
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -58,5 +66,8 @@ Global
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {DF96ADCD-1360-4613-85A7-E08409C200CF}
 	EndGlobalSection
 EndGlobal

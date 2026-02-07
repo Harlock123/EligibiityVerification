@@ -2765,32 +2765,40 @@
     ]
   },
   "packageFolders": {
-    "/home/lwatson/.nuget/packages/": {}
+    "C:\\Users\\nicho\\.nuget\\packages\\": {},
+    "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "/home/lwatson/RiderProjects/EligibilityVerification/Elig.Services/Elig.Services.csproj",
+      "projectUniqueName": "C:\\Repos\\EligibiityVerification\\Elig.Services\\Elig.Services.csproj",
       "projectName": "Elig.Services",
-      "projectPath": "/home/lwatson/RiderProjects/EligibilityVerification/Elig.Services/Elig.Services.csproj",
-      "packagesPath": "/home/lwatson/.nuget/packages/",
-      "outputPath": "/home/lwatson/RiderProjects/EligibilityVerification/Elig.Services/obj/",
+      "projectPath": "C:\\Repos\\EligibiityVerification\\Elig.Services\\Elig.Services.csproj",
+      "packagesPath": "C:\\Users\\nicho\\.nuget\\packages\\",
+      "outputPath": "C:\\Repos\\EligibiityVerification\\Elig.Services\\obj\\",
       "projectStyle": "PackageReference",
+      "fallbackFolders": [
+        "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+      ],
       "configFilePaths": [
-        "/home/lwatson/.nuget/NuGet/NuGet.Config"
+        "C:\\Users\\nicho\\AppData\\Roaming\\NuGet\\NuGet.Config",
+        "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+        "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
       ],
       "originalTargetFrameworks": [
         "net9.0"
       ],
       "sources": {
+        "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+        "C:\\Program Files\\dotnet\\library-packs": {},
         "https://api.nuget.org/v3/index.json": {}
       },
       "frameworks": {
         "net9.0": {
           "targetAlias": "net9.0",
           "projectReferences": {
-            "/home/lwatson/RiderProjects/EligibilityVerification/Elig.Data/Elig.Data.csproj": {
-              "projectPath": "/home/lwatson/RiderProjects/EligibilityVerification/Elig.Data/Elig.Data.csproj"
+            "C:\\Repos\\EligibiityVerification\\Elig.Data\\Elig.Data.csproj": {
+              "projectPath": "C:\\Repos\\EligibiityVerification\\Elig.Data\\Elig.Data.csproj"
             }
           }
         }
@@ -2805,7 +2813,7 @@
         "auditLevel": "low",
         "auditMode": "direct"
       },
-      "SdkAnalysisLevel": "9.0.300"
+      "SdkAnalysisLevel": "10.0.100"
     },
     "frameworks": {
       "net9.0": {
@@ -2826,7 +2834,7 @@
             "privateAssets": "all"
           }
         },
-        "runtimeIdentifierGraphPath": "/home/lwatson/.dotnet/sdk/9.0.305/PortableRuntimeIdentifierGraph.json"
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.102/PortableRuntimeIdentifierGraph.json"
       }
     }
   }

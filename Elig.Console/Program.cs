@@ -3,6 +3,7 @@ using Elig.Data.Models;
 using Elig.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using System.Linq;
 
 namespace Elig.Console;
 
@@ -23,6 +24,8 @@ class Program
         var receiverId = configuration["EdiSettings:ReceiverId"] ?? "RECEIVER456";
         var outputDir = configuration["EdiSettings:OutputDirectory"] ?? "./edi_output";
         var inputDir = configuration["EdiSettings:InputDirectory"] ?? "./edi_input";
+        var maxMembersPerFile = int.TryParse(configuration["EdiSettings:MaxMembersPerFile"], out var maxMembers) ? maxMembers : 10000;
+        var fileNamePattern = configuration["EdiSettings:FileNamePattern"] ?? "270_{payerId}_{providerId}_{batchId}_{timestamp}.txt";
 
         // Ensure directories exist
         Directory.CreateDirectory(outputDir);
@@ -48,7 +51,8 @@ class Program
             System.Console.WriteLine("4. View eligibility requests");
             System.Console.WriteLine("5. View eligibility responses");
             System.Console.WriteLine("6. Generate 270 for all DRAFT requests");
-            System.Console.WriteLine("7. Exit");
+            System.Console.WriteLine("7. Generate 270 batch file(s)");
+            System.Console.WriteLine("8. Exit");
             System.Console.Write("\nChoice: ");
 
             var choice = System.Console.ReadLine();
@@ -76,6 +80,9 @@ class Program
                         await GenerateAllDraftRequestsAsync(context, edi270Generator, senderId, receiverId, outputDir);
                         break;
                     case "7":
+                        await GenerateBatch270FilesAsync(context, edi270Generator, senderId, receiverId, outputDir, maxMembersPerFile, fileNamePattern);
+                        break;
+                    case "8":
                         running = false;
                         break;
                     default:
@@ -362,5 +369,58 @@ class Program
         }
 
         System.Console.WriteLine("\nAll files generated successfully!");
+    }
+
+    static string BuildBatchFileName(string pattern, long payerId, long providerId, long batchId)
+    {
+        return pattern
+            .Replace("{payerId}", payerId.ToString())
+            .Replace("{providerId}", providerId.ToString())
+            .Replace("{batchId}", batchId.ToString())
+            .Replace("{timestamp}", DateTime.Now.ToString("yyyyMMdd_HHmmss"));
+    }
+
+    static async Task GenerateBatch270FilesAsync(
+        EligibilityDbContext context,
+        Edi270Generator generator,
+        string senderId,
+        string receiverId,
+        string outputDir,
+        int maxMembersPerFile,
+        string fileNamePattern)
+    {
+        System.Console.WriteLine("\n=== Generate 270 Batch File(s) ===");
+
+        var eligible = await context.EligibilityRequests
+            .Include(r => r.Member)
+            .Include(r => r.Provider)
+            .Include(r => r.Payer)
+            .Where(r => r.RequestStatusCode == "DRAFT" || r.RequestStatusCode == "QUEUED")
+            .OrderBy(r => r.InquiryDate)
+            .ToListAsync();
+
+        if (!eligible.Any())
+        {
+            System.Console.WriteLine("No eligible requests found.");
+            return;
+        }
+
+        var groups = eligible.GroupBy(r => new { r.PayerId, r.ProviderId });
+        var filesWritten = 0;
+
+        foreach (var group in groups)
+        {
+            foreach (var chunk in group.Chunk(maxMembersPerFile))
+            {
+                var (batchId, content) = await generator.Generate270BatchFileAsync(chunk.Select(r => r.RequestId), senderId, receiverId);
+                var fileName = BuildBatchFileName(fileNamePattern, group.Key.PayerId, group.Key.ProviderId, batchId);
+                var filePath = Path.Combine(outputDir, fileName);
+                await File.WriteAllTextAsync(filePath, content);
+                filesWritten++;
+                System.Console.WriteLine($"Batch {batchId} -> {filePath} (members: {chunk.Length})");
+            }
+        }
+
+        System.Console.WriteLine($"\nCompleted. Files generated: {filesWritten}");
     }
 }
