@@ -215,6 +215,31 @@ CREATE INDEX idx_eligreq_payer ON eligibility_request(payer_id);
 CREATE INDEX idx_eligreq_inquiry_date ON eligibility_request(inquiry_date);
 CREATE INDEX idx_eligreq_submission_date ON eligibility_request(last_submission_date);
 
+-- Request Batch
+CREATE TABLE request_batch (
+    request_batch_id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    file_name NVARCHAR(200),
+    sender_id NVARCHAR(15) NOT NULL,
+    receiver_id NVARCHAR(15) NOT NULL,
+    payer_id BIGINT NOT NULL,
+    provider_id BIGINT NOT NULL,
+    interchange_control_number NVARCHAR(15) NOT NULL,
+    group_control_number NVARCHAR(15) NOT NULL,
+    transaction_control_number NVARCHAR(9) NOT NULL,
+    request_count INT NOT NULL,
+    status NVARCHAR(20) NOT NULL DEFAULT 'QUEUED',
+    raw_270_data NVARCHAR(MAX),
+    created_at DATETIME2 DEFAULT GETDATE(),
+    submitted_at DATETIME2,
+    CONSTRAINT FK_requestbatch_payer FOREIGN KEY (payer_id) REFERENCES payer(payer_id),
+    CONSTRAINT FK_requestbatch_provider FOREIGN KEY (provider_id) REFERENCES provider(provider_id)
+);
+
+ALTER TABLE eligibility_request
+    ADD CONSTRAINT FK_eligreq_batch FOREIGN KEY (request_batch_id) REFERENCES request_batch(request_batch_id);
+
+CREATE INDEX idx_request_batch_status ON request_batch(status);
+
 -- Eligibility Response (271 Transaction)
 CREATE TABLE eligibility_response (
     response_id BIGINT IDENTITY(1,1) PRIMARY KEY,
