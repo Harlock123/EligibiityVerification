@@ -138,49 +138,52 @@ class Program
         };
         context.Providers.Add(provider);
 
-        // Create Member
-        var member = new Member
-        {
-            MemberFirstName = "John",
-            MemberLastName = "Doe",
-            MemberMiddleName = "A",
-            MemberDateOfBirth = new DateTime(1980, 5, 15),
-            MemberGender = "M",
-            MemberSubscriberId = "ABC123456",
-            MemberGroupNumber = "GRP001",
-            MemberAddressLine1 = "123 Main St",
-            MemberCity = "New York",
-            MemberState = "NY",
-            MemberZip = "10001",
-            IsSubscriber = true,
-            CreatedBy = "System"
-        };
-        context.Members.Add(member);
-
         await context.SaveChangesAsync();
 
-        // Create Eligibility Request
-        var request = new EligibilityRequest
+        // Create multiple members + requests for batching
+        var requestsToAdd = new List<EligibilityRequest>();
+        for (int i = 1; i <= 10; i++)
         {
-            TraceNumber = Guid.NewGuid().ToString("N").Substring(0, 20),
-            MemberId = member.MemberId,
-            ProviderId = provider.ProviderId,
-            PayerId = payer.PayerId,
-            ServiceTypeCode = "30", // Health Benefit Plan Coverage
-            ServiceDate = DateTime.Today.AddDays(7),
-            RequestStatusCode = "DRAFT",
-            CreatedBy = "System"
-        };
-        context.EligibilityRequests.Add(request);
+            var m = new Member
+            {
+                MemberFirstName = $"John{i}",
+                MemberLastName = "Doe",
+                MemberDateOfBirth = new DateTime(1980, 5, 15),
+                MemberGender = "M",
+                MemberSubscriberId = $"ABC123{i:000}",
+                MemberGroupNumber = "GRP001",
+                MemberAddressLine1 = $"{100 + i} Main St",
+                MemberCity = "New York",
+                MemberState = "NY",
+                MemberZip = "10001",
+                IsSubscriber = true,
+                CreatedBy = "System"
+            };
+            context.Members.Add(m);
+            await context.SaveChangesAsync();
 
+            requestsToAdd.Add(new EligibilityRequest
+            {
+                TraceNumber = Guid.NewGuid().ToString("N").Substring(0, 20),
+                MemberId = m.MemberId,
+                ProviderId = provider.ProviderId,
+                PayerId = payer.PayerId,
+                ServiceTypeCode = "30",
+                ServiceDate = DateTime.Today.AddDays(7),
+                RequestStatusCode = "DRAFT",
+                CreatedBy = "System"
+            });
+        }
+
+        context.EligibilityRequests.AddRange(requestsToAdd);
         await context.SaveChangesAsync();
 
         System.Console.WriteLine($"Sample data created successfully!");
         System.Console.WriteLine($"  Payer ID: {payer.PayerId}");
         System.Console.WriteLine($"  Provider ID: {provider.ProviderId}");
-        System.Console.WriteLine($"  Member ID: {member.MemberId}");
-        System.Console.WriteLine($"  Request ID: {request.RequestId}");
-        System.Console.WriteLine($"  Trace Number: {request.TraceNumber}");
+        System.Console.WriteLine($"  Member ID: {requestsToAdd.First().MemberId}");
+        System.Console.WriteLine($"  Request ID: {requestsToAdd.First().RequestId}");
+        System.Console.WriteLine($"  Trace Number: {requestsToAdd.First().TraceNumber}");
     }
 
     static async Task Generate270FileAsync(EligibilityDbContext context, Edi270Generator generator,

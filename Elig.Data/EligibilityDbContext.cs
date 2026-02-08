@@ -172,7 +172,7 @@ public class EligibilityDbContext : DbContext
         // Configure EligibilityRequest
         modelBuilder.Entity<EligibilityRequest>(entity =>
         {
-            entity.ToTable("eligibility_request");
+            entity.ToTable("eligibility_request", tb => tb.UseSqlOutputClause(false));
             entity.HasKey(e => e.RequestId);
             entity.Property(e => e.RequestId).HasColumnName("request_id").ValueGeneratedOnAdd();
             entity.Property(e => e.TraceNumber).HasColumnName("trace_number").HasMaxLength(50).IsRequired();
@@ -210,7 +210,7 @@ public class EligibilityDbContext : DbContext
         // Configure RequestBatch
         modelBuilder.Entity<RequestBatch>(entity =>
         {
-            entity.ToTable("request_batch");
+            entity.ToTable("request_batch", tb => tb.UseSqlOutputClause(false));
             entity.HasKey(e => e.RequestBatchId);
             entity.Property(e => e.RequestBatchId).HasColumnName("request_batch_id").ValueGeneratedOnAdd();
             entity.Property(e => e.FileName).HasColumnName("file_name").HasMaxLength(200);
