@@ -2,6 +2,7 @@ using Elig.Data;
 using Elig.Data.Models;
 using Microsoft.EntityFrameworkCore;
 using System.Text;
+using System.Linq;
 
 namespace Elig.Services;
 
@@ -19,6 +20,176 @@ public class Edi270Generator
     {
         _context = context;
     }
+
+        /// <summary>
+        /// Generates a 270 EDI file for multiple eligibility requests (batched by payer/provider)
+        /// </summary>
+        public async Task<(long BatchId, string Content)> Generate270BatchFileAsync(IEnumerable<long> requestIds, string senderId, string receiverId)
+        {
+            var ids = requestIds.Distinct().ToList();
+            if (!ids.Any())
+                throw new ArgumentException("No request IDs provided for batching.");
+
+            var requests = await _context.EligibilityRequests
+                .Include(r => r.Member)
+                .Include(r => r.Provider)
+                .Include(r => r.Payer)
+                .Where(r => ids.Contains(r.RequestId))
+                .OrderBy(r => r.RequestId)
+                .ToListAsync();
+
+            if (requests.Count != ids.Count)
+                throw new InvalidOperationException("One or more request IDs were not found.");
+
+            var payerId = requests.First().PayerId;
+            var providerId = requests.First().ProviderId;
+            if (requests.Any(r => r.PayerId != payerId || r.ProviderId != providerId))
+                throw new InvalidOperationException("All requests in a batch must have the same payer and provider.");
+
+            var now = DateTime.Now;
+            var interchangeControlNumber = now.ToString("yyyyMMddHHmmss").Substring(4, 9);
+            var groupControlNumber = now.ToString("HHmmss");
+
+            var batch = new RequestBatch
+            {
+                SenderId = senderId,
+                ReceiverId = receiverId,
+                PayerId = payerId,
+                ProviderId = providerId,
+                InterchangeControlNumber = interchangeControlNumber,
+                GroupControlNumber = groupControlNumber,
+                TransactionControlNumber = "B" + now.ToString("HHmmss"),
+                RequestCount = requests.Count,
+                Status = "QUEUED",
+                CreatedAt = now
+            };
+
+            _context.RequestBatches.Add(batch);
+            await _context.SaveChangesAsync();
+
+            var transactionControlNumber = batch.RequestBatchId.ToString().PadLeft(4, '0');
+            var sb = new StringBuilder();
+
+            // ISA - Interchange Control Header
+            sb.AppendLine($"ISA{ElementSeparator}00{ElementSeparator}          {ElementSeparator}00{ElementSeparator}          " +
+                         $"{ElementSeparator}ZZ{ElementSeparator}{senderId.PadRight(15)}{ElementSeparator}ZZ{ElementSeparator}{receiverId.PadRight(15)}" +
+                         $"{ElementSeparator}{now:yyMMdd}{ElementSeparator}{now:HHmm}{ElementSeparator}^{ElementSeparator}00501" +
+                         $"{ElementSeparator}{interchangeControlNumber}{ElementSeparator}0{ElementSeparator}P{ElementSeparator}{SubelementSeparator}{SegmentTerminator}");
+
+            // GS - Functional Group Header
+            sb.AppendLine($"GS{ElementSeparator}HS{ElementSeparator}{senderId}{ElementSeparator}{receiverId}" +
+                         $"{ElementSeparator}{now:yyyyMMdd}{ElementSeparator}{now:HHmmss}{ElementSeparator}{groupControlNumber}" +
+                         $"{ElementSeparator}X{ElementSeparator}005010X279A1{SegmentTerminator}");
+
+            // ST - Transaction Set Header
+            sb.AppendLine($"ST{ElementSeparator}270{ElementSeparator}{transactionControlNumber}{ElementSeparator}005010X279A1{SegmentTerminator}");
+
+            // BHT - Beginning of Hierarchical Transaction
+            sb.AppendLine($"BHT{ElementSeparator}0022{ElementSeparator}13{ElementSeparator}{requests.First().TraceNumber}" +
+                         $"{ElementSeparator}{now:yyyyMMdd}{ElementSeparator}{now:HHmmss}{SegmentTerminator}");
+
+            int hlCounter = 1;
+
+            // HL - Information Source (Payer)
+            sb.AppendLine($"HL{ElementSeparator}{hlCounter}{ElementSeparator}{ElementSeparator}20{ElementSeparator}1{SegmentTerminator}");
+            sb.AppendLine($"NM1{ElementSeparator}PR{ElementSeparator}2{ElementSeparator}{requests.First().Payer.PayerName}" +
+                         $"{ElementSeparator}{ElementSeparator}{ElementSeparator}{ElementSeparator}{ElementSeparator}{ElementSeparator}" +
+                         $"{requests.First().Payer.PayerIdentifierType}{ElementSeparator}{requests.First().Payer.PayerIdentifier}{SegmentTerminator}");
+
+            int payerHL = hlCounter++;
+
+            // HL - Information Receiver (Provider)
+            sb.AppendLine($"HL{ElementSeparator}{hlCounter}{ElementSeparator}{payerHL}{ElementSeparator}21{ElementSeparator}1{SegmentTerminator}");
+
+            var provider = requests.First().Provider;
+            var providerName = !string.IsNullOrEmpty(provider.ProviderOrganizationName)
+                ? provider.ProviderOrganizationName
+                : $"{provider.ProviderLastName}{ElementSeparator}{provider.ProviderFirstName}";
+
+            var entityTypeCode = !string.IsNullOrEmpty(provider.ProviderOrganizationName) ? "2" : "1";
+
+            sb.AppendLine($"NM1{ElementSeparator}1P{ElementSeparator}{entityTypeCode}{ElementSeparator}{providerName}" +
+                         $"{ElementSeparator}{ElementSeparator}{ElementSeparator}{ElementSeparator}{ElementSeparator}{ElementSeparator}" +
+                         $"XX{ElementSeparator}{provider.ProviderNpi}{SegmentTerminator}");
+
+            if (!string.IsNullOrEmpty(provider.ProviderTaxId))
+            {
+                sb.AppendLine($"REF{ElementSeparator}EI{ElementSeparator}{provider.ProviderTaxId}{SegmentTerminator}");
+            }
+
+            int providerHL = hlCounter++;
+
+            // HL - Subscriber loops
+            foreach (var request in requests)
+            {
+                sb.AppendLine($"HL{ElementSeparator}{hlCounter}{ElementSeparator}{providerHL}{ElementSeparator}22{ElementSeparator}0{SegmentTerminator}");
+
+                sb.AppendLine($"TRN{ElementSeparator}1{ElementSeparator}{request.TraceNumber}{ElementSeparator}{senderId}{SegmentTerminator}");
+
+                sb.AppendLine($"NM1{ElementSeparator}IL{ElementSeparator}1{ElementSeparator}{request.Member.MemberLastName}" +
+                             $"{ElementSeparator}{request.Member.MemberFirstName}" +
+                             $"{ElementSeparator}{request.Member.MemberMiddleName ?? ""}{ElementSeparator}{ElementSeparator}{ElementSeparator}" +
+                             $"{ElementSeparator}MI{ElementSeparator}{request.Member.MemberSubscriberId ?? ""}{SegmentTerminator}");
+
+                if (!string.IsNullOrEmpty(request.Member.MemberAddressLine1))
+                {
+                    sb.AppendLine($"N3{ElementSeparator}{request.Member.MemberAddressLine1}" +
+                                 $"{(string.IsNullOrEmpty(request.Member.MemberAddressLine2) ? "" : $"{ElementSeparator}{request.Member.MemberAddressLine2}")}{SegmentTerminator}");
+                }
+
+                if (!string.IsNullOrEmpty(request.Member.MemberCity))
+                {
+                    sb.AppendLine($"N4{ElementSeparator}{request.Member.MemberCity}{ElementSeparator}{request.Member.MemberState}" +
+                                 $"{ElementSeparator}{request.Member.MemberZip}{SegmentTerminator}");
+                }
+
+                sb.AppendLine($"DMG{ElementSeparator}D8{ElementSeparator}{request.Member.MemberDateOfBirth:yyyyMMdd}" +
+                             $"{ElementSeparator}{request.Member.MemberGender ?? "U"}{SegmentTerminator}");
+
+                if (request.ServiceDate.HasValue)
+                {
+                    sb.AppendLine($"DTP{ElementSeparator}472{ElementSeparator}D8{ElementSeparator}{request.ServiceDate.Value:yyyyMMdd}{SegmentTerminator}");
+                }
+
+                var serviceTypeCode = string.IsNullOrEmpty(request.ServiceTypeCode) ? "30" : request.ServiceTypeCode;
+                sb.AppendLine($"EQ{ElementSeparator}{serviceTypeCode}{SegmentTerminator}");
+
+                hlCounter++;
+            }
+
+            // Count segments for SE
+            var segments = sb.ToString().Split(new[] { SegmentTerminator }, StringSplitOptions.RemoveEmptyEntries);
+            var segmentCount = segments.Count(s => !s.StartsWith("ISA") && !s.StartsWith("GS")) + 1;
+
+            // SE - Transaction Set Trailer
+            sb.AppendLine($"SE{ElementSeparator}{segmentCount}{ElementSeparator}{transactionControlNumber}{SegmentTerminator}");
+
+            // GE - Functional Group Trailer
+            sb.AppendLine($"GE{ElementSeparator}1{ElementSeparator}{groupControlNumber}{SegmentTerminator}");
+
+            // IEA - Interchange Control Trailer
+            sb.AppendLine($"IEA{ElementSeparator}1{ElementSeparator}{interchangeControlNumber}{SegmentTerminator}");
+
+            var edi270Content = sb.ToString();
+
+            batch.TransactionControlNumber = transactionControlNumber;
+            batch.Raw270Data = edi270Content;
+            batch.FileName ??= $"270_batch_{batch.RequestBatchId}.txt";
+
+            foreach (var request in requests)
+            {
+                request.RequestBatchId = batch.RequestBatchId;
+                request.Raw270Data = edi270Content;
+                request.RequestStatusCode = "QUEUED";
+                request.LastSubmissionDate = now;
+                request.SubmissionAttemptCount++;
+                request.UpdatedAt = now;
+            }
+
+            await _context.SaveChangesAsync();
+
+            return (batch.RequestBatchId, edi270Content);
+        }
 
     /// <summary>
     /// Generates a 270 EDI file for a specific eligibility request

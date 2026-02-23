@@ -54,4 +54,5 @@ public class EligibilityRequest
     public virtual ICollection<EligibilityResponse> Responses { get; set; } = new List<EligibilityResponse>();
     public virtual ICollection<RequestStatusHistory> StatusHistory { get; set; } = new List<RequestStatusHistory>();
     public virtual ICollection<TransactionErrorLog> ErrorLogs { get; set; } = new List<TransactionErrorLog>();
+    public virtual RequestBatch? RequestBatch { get; set; }
 }

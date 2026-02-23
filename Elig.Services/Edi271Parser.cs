@@ -2,6 +2,7 @@ using Elig.Data;
 using Elig.Data.Models;
 using Microsoft.EntityFrameworkCore;
 using System.Text.RegularExpressions;
+using System.Linq;
 
 namespace Elig.Services;
 
@@ -21,123 +22,165 @@ public class Edi271Parser
     }
 
     /// <summary>
-    /// Parses a 271 EDI file and creates/updates database records
+    /// Parses a 271 EDI file and creates/updates database records. Supports multiple subscriber loops in one 271.
     /// </summary>
     public async Task<long> Parse271FileAsync(string ediContent, string? currentUser = null)
     {
         try
         {
             var segments = ParseSegments(ediContent);
-            var response = new EligibilityResponse
-            {
-                ResponseReceivedDate = DateTime.Now,
-                ResponseStatusCode = "RECEIVED",
-                Raw271Data = ediContent,
-                CreatedBy = currentUser,
-                UpdatedBy = currentUser
-            };
 
-            string? traceNumber = null;
+            // Track responses and benefit details per subscriber trace
+            var responses = new Dictionary<string, (EligibilityResponse response, List<BenefitDetail> benefits)>();
+
+            EligibilityResponse? currentResponse = null;
+            List<BenefitDetail>? currentBenefits = null;
+            string? currentTrace = null;
             string? transactionControlNumber = null;
-            long? requestId = null;
 
-            // Parse main segments
-            foreach (var segment in segments)
+            void StartNewSubscriber()
             {
+                currentResponse = null;
+                currentBenefits = null;
+                currentTrace = null;
+            }
+
+            for (int i = 0; i < segments.Count; i++)
+            {
+                var segment = segments[i];
                 var elements = segment.Split(ElementSeparator);
+                if (elements.Length == 0) 
+                    continue;
+
                 var segmentId = elements[0];
 
                 switch (segmentId)
                 {
                     case "ST":
-                        // Transaction Set Header
                         if (elements.Length > 1)
                             transactionControlNumber = elements[1];
                         break;
 
-                    case "BHT":
-                        // Beginning of Hierarchical Transaction - contains trace number
-                        if (elements.Length > 3)
-                            traceNumber = elements[3];
+                    case "HL":
+                        // Start of a subscriber/dependent loop (2000C/2000D)
+                        if (elements.Length > 3 && (elements[3] == "22" || elements[3] == "23"))
+                        {
+                            StartNewSubscriber();
+                        }
                         break;
 
                     case "TRN":
-                        // Trace - another place to find trace number
-                        if (elements.Length > 2 && string.IsNullOrEmpty(traceNumber))
-                            traceNumber = elements[2];
+                        // Trace number identifies the request/subscriber
+                        if (elements.Length > 2)
+                        {
+                            currentTrace = elements[2];
+
+                            if (!responses.TryGetValue(currentTrace, out var entry))
+                            {
+                                var resp = new EligibilityResponse
+                                {
+                                    TraceNumber = currentTrace,
+                                    ResponseReceivedDate = DateTime.Now,
+                                    ResponseStatusCode = "RECEIVED",
+                                    Raw271Data = ediContent,
+                                    CreatedBy = currentUser,
+                                    UpdatedBy = currentUser,
+                                    TransactionControlNumber = transactionControlNumber
+                                };
+                                entry = (resp, new List<BenefitDetail>());
+                                responses[currentTrace] = entry;
+                            }
+
+                            currentResponse = entry.response;
+                            currentBenefits = entry.benefits;
+                        }
+                        break;
+
+                    case "BHT":
                         break;
 
                     case "EB":
-                        // Eligibility or Benefit Information
-                        ParseEBSegment(elements, response);
+                        if (currentResponse != null && currentBenefits != null)
+                        {
+                            // Set response-level coverage status and plan name from the first EB per subscriber
+                            if (currentResponse.CoverageStatus is null)
+                                ParseEBSegment(elements, currentResponse);
+
+                            var benefit = BuildBenefitFromEBSegment(segments, ref i, currentResponse.ResponseId);
+                            currentBenefits.Add(benefit);
+                        }
                         break;
 
                     case "DTP":
-                        // Date or Time or Period
-                        ParseDTPSegment(elements, response);
+                        if (currentResponse != null)
+                        {
+                            ParseDTPSegment(elements, currentResponse);
+                        }
                         break;
 
                     case "AAA":
-                        // Request Validation - error/rejection info
-                        ParseAAASegment(elements, response);
+                        if (currentResponse != null)
+                        {
+                            ParseAAASegment(elements, currentResponse);
+                        }
                         break;
 
                     case "NM1":
-                        // Name - can contain plan information
-                        ParseNM1Segment(elements, response);
-                        break;
-
-                    case "N3":
-                    case "N4":
-                    case "REF":
-                    case "PER":
-                        // Additional info - can be parsed if needed
+                        if (currentResponse != null)
+                        {
+                            ParseNM1Segment(elements, currentResponse);
+                        }
                         break;
                 }
             }
 
-            // Find the matching request
-            if (!string.IsNullOrEmpty(traceNumber))
-            {
-                var request = await _context.EligibilityRequests
-                    .FirstOrDefaultAsync(r => r.TraceNumber == traceNumber);
+            if (!responses.Any())
+                throw new InvalidOperationException("No subscriber trace numbers found in 271 response.");
 
-                if (request != null)
-                {
-                    requestId = request.RequestId;
-                    response.RequestId = requestId.Value;
-                    response.TraceNumber = traceNumber;
-
-                    // Update request status
-                    request.RequestStatusCode = "RESPONSE_RECEIVED";
-                    request.UpdatedAt = DateTime.Now;
-                    request.UpdatedBy = currentUser;
-                }
-                else
-                {
-                    throw new InvalidOperationException($"No matching request found for trace number: {traceNumber}");
-                }
-            }
-            else
+            // Persist responses and update matching requests
+            foreach (var kvp in responses)
             {
-                throw new InvalidOperationException("No trace number found in 271 response");
+                var trace = kvp.Key;
+                var (resp, _) = kvp.Value;
+
+                var request = await _context.EligibilityRequests.FirstOrDefaultAsync(r => r.TraceNumber == trace)
+                    ?? throw new InvalidOperationException($"No matching request found for trace number: {trace}");
+
+                resp.RequestId = request.RequestId;
+                resp.ResponseStatusCode = "PROCESSED";
+                resp.ProcessedDate = DateTime.Now;
+
+                request.RequestStatusCode = "RESPONSE_RECEIVED";
+                request.UpdatedAt = DateTime.Now;
+                request.UpdatedBy = currentUser;
+
+                _context.EligibilityResponses.Add(resp);
             }
 
-            response.TransactionControlNumber = transactionControlNumber;
-            response.ProcessedDate = DateTime.Now;
-            response.ResponseStatusCode = "PROCESSED";
-
-            _context.EligibilityResponses.Add(response);
             await _context.SaveChangesAsync();
 
-            // Parse and save benefit details
-            await ParseBenefitDetailsAsync(segments, response.ResponseId, currentUser);
+            // Persist benefit details now that response IDs are available
+            foreach (var entry in responses.Values)
+            {
+                var respId = entry.response.ResponseId;
+                foreach (var benefit in entry.benefits)
+                {
+                    benefit.ResponseId = respId;
+                }
 
-            return response.ResponseId;
+                if (entry.benefits.Any())
+                {
+                    _context.BenefitDetails.AddRange(entry.benefits);
+                }
+            }
+
+            await _context.SaveChangesAsync();
+
+            // Return the first response id for backward compatibility
+            return responses.Values.First().response.ResponseId;
         }
         catch (Exception ex)
         {
-            // Log the error
             var errorLog = new TransactionErrorLog
             {
                 ErrorType = "PARSING",
@@ -281,98 +324,91 @@ public class Edi271Parser
         }
     }
 
-    private async Task ParseBenefitDetailsAsync(List<string> segments, long responseId, string? currentUser)
+    private BenefitDetail BuildBenefitFromEBSegment(List<string> segments, ref int index, long responseId)
     {
-        var benefits = new List<BenefitDetail>();
+        var segment = segments[index];
+        var elements = segment.Split(ElementSeparator);
 
-        for (int i = 0; i < segments.Count; i++)
+        var benefit = new BenefitDetail
         {
-            var segment = segments[i];
-            var elements = segment.Split(ElementSeparator);
-
-            if (elements[0] == "EB")
-            {
-                var benefit = new BenefitDetail
-                {
-                    ResponseId = responseId,
+            ResponseId = responseId,
                     BenefitTypeCode = "30" // Default - Health Benefit Plan Coverage
-                };
+        };
 
                 // EB*1*FAM*30**GOLD PLAN*27*50*****Y~
-                if (elements.Length > 1)
-                {
-                    // Eligibility or Benefit Information
-                    var infoCode = elements[1];
-                    benefit.AuthorizationRequired = infoCode == "6" || infoCode == "C";
-                }
-
-                if (elements.Length > 2)
-                {
-                    benefit.CoverageLevelCode = elements[2]; // IND, FAM, etc.
-                }
-
-                if (elements.Length > 3)
-                {
-                    benefit.ServiceTypeCode = elements[3];
-                    if (!string.IsNullOrEmpty(elements[3]))
-                        benefit.BenefitTypeCode = elements[3];
-                }
-
-                if (elements.Length > 5)
-                {
-                    benefit.BenefitDescription = elements[5];
-                }
-
-                if (elements.Length > 6)
-                {
-                    // Time Period Qualifier
-                    benefit.TimePeriodQualifier = elements[6];
-                }
-
-                if (elements.Length > 7 && decimal.TryParse(elements[7], out decimal amount))
-                {
-                    benefit.BenefitAmount = amount;
-                }
-
-                if (elements.Length > 8 && decimal.TryParse(elements[8], out decimal percentage))
-                {
-                    benefit.BenefitPercentage = percentage;
-                }
-
-                if (elements.Length > 12)
-                {
-                    benefit.InNetworkIndicator = elements[12] == "Y";
-                }
-
-                // Look ahead for REF segments that might contain additional benefit info
-                for (int j = i + 1; j < segments.Count && j < i + 5; j++)
-                {
-                    var nextSegment = segments[j];
-                    if (nextSegment.StartsWith("EB")) break; // Next benefit
-
-                    var nextElements = nextSegment.Split(ElementSeparator);
-                    if (nextElements[0] == "REF" && nextElements.Length > 2)
-                    {
-                        if (nextElements[1] == "1J") // Prior Authorization Number
-                        {
-                            benefit.PriorAuthorizationNumber = nextElements[2];
-                        }
-                    }
-                    else if (nextElements[0] == "DTP")
-                    {
-                        ParseBenefitDTP(nextElements, benefit);
-                    }
-                }
-
-                benefits.Add(benefit);
-            }
-        }
-
-        if (benefits.Any())
+        if (elements.Length > 1)
         {
-            _context.BenefitDetails.AddRange(benefits);
-            await _context.SaveChangesAsync();
+                    // Eligibility or Benefit Information
+            var infoCode = elements[1];
+            benefit.AuthorizationRequired = infoCode == "6" || infoCode == "C";
         }
+
+        if (elements.Length > 2)
+        {
+                    benefit.CoverageLevelCode = elements[2]; // IND, FAM, etc.
+        }
+
+        if (elements.Length > 3)
+        {
+            benefit.ServiceTypeCode = elements[3];
+            if (!string.IsNullOrEmpty(elements[3]))
+                benefit.BenefitTypeCode = elements[3];
+        }
+
+        if (elements.Length > 5)
+        {
+            benefit.BenefitDescription = elements[5];
+        }
+
+        if (elements.Length > 6)
+        {
+            benefit.TimePeriodQualifier = elements[6];
+        }
+
+        if (elements.Length > 7 && decimal.TryParse(elements[7], out decimal amount))
+        {
+            benefit.BenefitAmount = amount;
+        }
+
+        if (elements.Length > 8 && decimal.TryParse(elements[8], out decimal percentage))
+        {
+            benefit.BenefitPercentage = percentage;
+        }
+
+        if (elements.Length > 12)
+        {
+            benefit.InNetworkIndicator = elements[12] == "Y";
+        }
+
+        // Look ahead for related segments until next EB/HL/ST/SE
+        for (int j = index + 1; j < segments.Count; j++)
+        {
+            var nextSegment = segments[j];
+            if (nextSegment.StartsWith("EB") || nextSegment.StartsWith("HL") || nextSegment.StartsWith("SE") || nextSegment.StartsWith("ST"))
+            {
+                index = j - 1; // outer loop will ++ to next segment
+                break;
+            }
+
+            var nextElements = nextSegment.Split(ElementSeparator);
+            if (nextElements.Length == 0) continue;
+
+            if (nextElements[0] == "REF" && nextElements.Length > 2)
+            {
+                if (nextElements[1] == "1J")
+                {
+                    benefit.PriorAuthorizationNumber = nextElements[2];
+                }
+            }
+            else if (nextElements[0] == "DTP")
+            {
+                ParseBenefitDTP(nextElements, benefit);
+            }
+
+            index = j; // advance with inner processing
+        }
+
+        return benefit;
     }
 
     private void ParseBenefitDTP(string[] elements, BenefitDetail benefit)

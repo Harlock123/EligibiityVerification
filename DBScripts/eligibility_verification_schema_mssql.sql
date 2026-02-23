@@ -66,6 +66,60 @@ INSERT INTO eligibility_disposition (disposition_code, disposition_description) 
 ('TERMINATED', 'Coverage terminated'),
 ('UNKNOWN', 'Unknown status');
 
+INSERT INTO benefit_type (benefit_code, benefit_description) VALUES
+('1', 'Medical Care'),
+('2', 'Surgical'),
+('4', 'Diagnostic X-Ray'),
+('5', 'Diagnostic Lab'),
+('6', 'Radiation Therapy'),
+('7', 'Anesthesia'),
+('8', 'Surgical Assistance'),
+('12', 'Durable Medical Equipment Purchase'),
+('13', 'Ambulatory Service Center Facility'),
+('18', 'Durable Medical Equipment Rental'),
+('20', 'Second Surgical Opinion'),
+('30', 'Health Benefit Plan Coverage'),
+('33', 'Chiropractic'),
+('35', 'Dental Care'),
+('40', 'Oral Surgery'),
+('42', 'Home Health Care'),
+('45', 'Hospice'),
+('47', 'Hospital'),
+('48', 'Hospital - Inpatient'),
+('50', 'Hospital - Outpatient'),
+('51', 'Hospital - Emergency Accident'),
+('52', 'Hospital - Emergency Medical'),
+('53', 'Hospital - Ambulatory Surgical'),
+('62', 'MRI/CAT Scan'),
+('65', 'Newborn Care'),
+('68', 'Well Baby Care'),
+('73', 'Diagnostic Medical'),
+('76', 'Dialysis'),
+('78', 'Chemotherapy'),
+('80', 'Immunizations'),
+('81', 'Routine Physical'),
+('82', 'Family Planning'),
+('86', 'Emergency Services'),
+('88', 'Pharmacy'),
+('93', 'Podiatry'),
+('98', 'Professional (Physician) Visit - Office'),
+('99', 'Professional (Physician) Visit - Inpatient'),
+('A0', 'Professional (Physician) Visit - Outpatient'),
+('A3', 'Professional (Physician) Visit - Home'),
+('A6', 'Psychotherapy'),
+('A7', 'Psychiatric - Inpatient'),
+('A8', 'Psychiatric - Outpatient'),
+('AD', 'Occupational Therapy'),
+('AE', 'Physical Medicine'),
+('AF', 'Speech Therapy'),
+('AG', 'Skilled Nursing Care'),
+('AI', 'Substance Abuse'),
+('AL', 'Vision (Optometry)'),
+('BG', 'Cardiac Rehabilitation'),
+('MH', 'Mental Health'),
+('UC', 'Urgent Care'),
+('91', 'Brand Name Prescription Drug'),
+('92', 'Generic Prescription Drug');
 -- =====================================================
 -- CORE ENTITY TABLES
 -- =====================================================
@@ -214,6 +268,31 @@ CREATE INDEX idx_eligreq_provider ON eligibility_request(provider_id);
 CREATE INDEX idx_eligreq_payer ON eligibility_request(payer_id);
 CREATE INDEX idx_eligreq_inquiry_date ON eligibility_request(inquiry_date);
 CREATE INDEX idx_eligreq_submission_date ON eligibility_request(last_submission_date);
+
+-- Request Batch
+CREATE TABLE request_batch (
+    request_batch_id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    file_name NVARCHAR(200),
+    sender_id NVARCHAR(15) NOT NULL,
+    receiver_id NVARCHAR(15) NOT NULL,
+    payer_id BIGINT NOT NULL,
+    provider_id BIGINT NOT NULL,
+    interchange_control_number NVARCHAR(15) NOT NULL,
+    group_control_number NVARCHAR(15) NOT NULL,
+    transaction_control_number NVARCHAR(9) NOT NULL,
+    request_count INT NOT NULL,
+    status NVARCHAR(20) NOT NULL DEFAULT 'QUEUED',
+    raw_270_data NVARCHAR(MAX),
+    created_at DATETIME2 DEFAULT GETDATE(),
+    submitted_at DATETIME2,
+    CONSTRAINT FK_requestbatch_payer FOREIGN KEY (payer_id) REFERENCES payer(payer_id),
+    CONSTRAINT FK_requestbatch_provider FOREIGN KEY (provider_id) REFERENCES provider(provider_id)
+);
+
+ALTER TABLE eligibility_request
+    ADD CONSTRAINT FK_eligreq_batch FOREIGN KEY (request_batch_id) REFERENCES request_batch(request_batch_id);
+
+CREATE INDEX idx_request_batch_status ON request_batch(status);
 
 -- Eligibility Response (271 Transaction)
 CREATE TABLE eligibility_response (
