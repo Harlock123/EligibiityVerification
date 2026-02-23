@@ -1,4 +1,4 @@
-using Elig.Data;
+﻿using Elig.Data;
 using Elig.Data.Models;
 using Elig.Services;
 using Microsoft.EntityFrameworkCore;
@@ -9,6 +9,17 @@ namespace Elig.Console;
 
 class Program
 {
+    // All benefit_type codes present in the seed data
+    private static readonly string[] SeededBenefitCodes =
+    [
+        "1",  "2",  "4",  "5",  "6",  "7",  "8",  "12", "13", "18",
+        "20", "30", "33", "35", "40", "42", "45", "47", "48", "50",
+        "51", "52", "53", "62", "65", "68", "73", "76", "78", "80",
+        "81", "82", "86", "88", "91", "92", "93", "98", "99", "A0",
+        "A3", "A6", "A7", "A8", "AD", "AE", "AF", "AG", "AI", "AL",
+        "BG", "MH", "UC"
+    ];
+
     static async Task Main(string[] args)
     {
         System.Console.WriteLine("=== EDI 270/271 Eligibility Verification System ===\n");
@@ -52,7 +63,8 @@ class Program
             System.Console.WriteLine("5. View eligibility responses");
             System.Console.WriteLine("6. Generate 270 for all DRAFT requests");
             System.Console.WriteLine("7. Generate 270 batch file(s)");
-            System.Console.WriteLine("8. Exit");
+            System.Console.WriteLine("8. Smoke test multi-member 271 parser");
+            System.Console.WriteLine("9. Exit");
             System.Console.Write("\nChoice: ");
 
             var choice = System.Console.ReadLine();
@@ -83,6 +95,9 @@ class Program
                         await GenerateBatch270FilesAsync(context, edi270Generator, senderId, receiverId, outputDir, maxMembersPerFile, fileNamePattern);
                         break;
                     case "8":
+                        await SmokeTest271ParserAsync(context, edi271Parser);
+                        break;
+                    case "9":
                         running = false;
                         break;
                     default:
@@ -98,6 +113,175 @@ class Program
         }
 
         System.Console.WriteLine("\nGoodbye!");
+    }
+
+    static string BuildSmokeTest271(IReadOnlyList<(string traceNumber, string firstName, bool isActive, string planName, string benefitTypeCode)> subscribers)
+    {
+        var sb = new System.Text.StringBuilder();
+        void Seg(string s) => sb.Append(s).Append('~').AppendLine();
+
+        Seg("ISA*00*          *00*          *ZZ*RECEIVER456    *ZZ*SENDER123      *240101*1200*^*00501*000000001*0*P*:");
+        Seg("GS*HB*RECEIVER456*SENDER123*20240101*1200*1*X*005010X279A1");
+        Seg("ST*271*0001*005010X279A1");
+        Seg("BHT*0022*11*SMOKETEST*20240101*1200");
+        Seg("HL*1**20*1");
+        Seg("NM1*PR*2*TEST PAYER*****PI*00001");
+        Seg("HL*2*1*21*1");
+        Seg("NM1*1P*2*TEST PROVIDER*****XX*9999999999");
+
+        int hlIndex = 3;
+        foreach (var (trace, firstName, isActive, planName, benefitTypeCode) in subscribers)
+        {
+            var eligCode = isActive ? "1" : "6"; // 1 = Active, 6 = Inactive
+            Seg($"HL*{hlIndex}*2*22*0");
+            Seg($"TRN*2*{trace}*9SMOKETEST");
+            Seg($"NM1*IL*1*DOE*{firstName}****MI*TST{hlIndex:000}");
+            // EB03 = service type code → maps to BenefitTypeCode — must exist in benefit_type seed data
+            Seg($"EB*{eligCode}*FAM*{benefitTypeCode}**{planName}");
+            Seg("DTP*291*D8*20240101");
+            hlIndex++;
+        }
+
+        var segCount = sb.ToString().Split('~', StringSplitOptions.RemoveEmptyEntries).Length + 1; // +SE
+        Seg($"SE*{segCount}*0001");
+        Seg("GE*1*1");
+        Seg("IEA*1*000000001");
+
+        return sb.ToString();
+    }
+
+    static async Task SmokeTest271ParserAsync(EligibilityDbContext context, Edi271Parser parser)
+    {
+        System.Console.WriteLine("\n=== [TEST] Multi-Member 271 Parser Smoke Test ===");
+        System.Console.Write("How many test subscribers? (default 3): ");
+        var input = System.Console.ReadLine();
+        int count = int.TryParse(input, out var n) && n > 0 ? n : 3;
+
+        // --- 1. Seed a payer + provider if none exist ---
+        var payer = await context.Payers.FirstOrDefaultAsync()
+            ?? new Payer { PayerName = "Test Payer", PayerIdentifier = "00001", PayerIdentifierType = "PAYERID", CreatedBy = "SmokeTest" };
+        if (payer.PayerId == 0) { context.Payers.Add(payer); await context.SaveChangesAsync(); }
+
+        var provider = await context.Providers.FirstOrDefaultAsync()
+            ?? new Provider { ProviderNpi = "9999999999", ProviderType = "ORGANIZATION", CreatedBy = "SmokeTest" };
+        if (provider.ProviderId == 0) { context.Providers.Add(provider); await context.SaveChangesAsync(); }
+
+        // --- 2. Seed test requests with unique trace numbers ---
+        var testRequests = new List<EligibilityRequest>();
+        for (int i = 0; i < count; i++)
+        {
+            var member = new Member
+            {
+                MemberFirstName = $"Smoke{i + 1}",
+                MemberLastName = "Tester",
+                MemberDateOfBirth = new DateTime(1990, 1, 1),
+                MemberGender = "M",
+                MemberSubscriberId = $"SMKTST{i + 1:000}",
+                IsSubscriber = true,
+                CreatedBy = "SmokeTest"
+            };
+            context.Members.Add(member);
+            await context.SaveChangesAsync();
+
+            var req = new EligibilityRequest
+            {
+                TraceNumber = $"SMKTEST{Guid.NewGuid():N}"[..20],
+                MemberId = member.MemberId,
+                ProviderId = provider.ProviderId,
+                PayerId = payer.PayerId,
+                RequestStatusCode = "QUEUED",
+                CreatedBy = "SmokeTest"
+            };
+            context.EligibilityRequests.Add(req);
+            await context.SaveChangesAsync();
+            testRequests.Add(req);
+        }
+
+        System.Console.WriteLine($"\nSeeded {count} request(s). Building 271...");
+
+        // --- 3. Build subscribers — cycle through seeded benefit codes, alternate active/inactive ---
+        var subscribers = testRequests.Select((r, idx) =>
+        (
+            r.TraceNumber,
+            $"Smoke{idx + 1}",
+            isActive: idx % 2 == 0,
+            planName: idx % 2 == 0 ? "GOLD PLAN" : "INACTIVE PLAN",
+            benefitTypeCode: SeededBenefitCodes[idx % SeededBenefitCodes.Length]
+        )).ToList();
+
+        var edi271 = BuildSmokeTest271(subscribers);
+
+        System.Console.Write("\nPrint generated 271? (y/n): ");
+        if (System.Console.ReadLine()?.Trim().ToLower() == "y")
+        {
+            System.Console.WriteLine("\n" + edi271);
+        }
+
+        // --- 4. Parse ---
+        System.Console.WriteLine("\nParsing...");
+        await parser.Parse271FileAsync(edi271, "SmokeTest");
+
+        // --- 5. Report results ---
+        var responsesByTrace = await context.EligibilityResponses
+            .Include(r => r.BenefitDetails)
+            .Where(r => testRequests.Select(x => x.TraceNumber).Contains(r.TraceNumber))
+            .ToDictionaryAsync(r => r.TraceNumber);
+
+        var updatedRequests = await context.EligibilityRequests
+            .Where(r => testRequests.Select(x => x.RequestId).Contains(r.RequestId))
+            .ToDictionaryAsync(r => r.TraceNumber);
+
+        System.Console.WriteLine($"\n{"#",-4} {"Trace",-22} {"Coverage",-10} {"Plan",-14} {"BenefitCode",-13} {"Benefits",-10} {"Req Status",-20} {"PASS?"}");
+        System.Console.WriteLine(new string('-', 100));
+
+        int passed = 0;
+        for (int i = 0; i < subscribers.Count; i++)
+        {
+            var (trace, firstName, isActive, planName, benefitTypeCode) = subscribers[i];
+            responsesByTrace.TryGetValue(trace, out var resp);
+            updatedRequests.TryGetValue(trace, out var req);
+
+            bool responseExists  = resp is not null;
+            bool coverageCorrect = isActive ? resp?.CoverageStatus == "ACTIVE"
+                                            : resp?.CoverageStatus != "ACTIVE";
+            bool statusUpdated   = req?.RequestStatusCode == "RESPONSE_RECEIVED";
+            bool benefitsPresent = resp?.BenefitDetails.Count > 0;
+            bool codeCorrect     = resp?.BenefitDetails.Any(b => b.BenefitTypeCode == benefitTypeCode) ?? false;
+            bool pass            = responseExists && coverageCorrect && statusUpdated && benefitsPresent && codeCorrect;
+
+            if (pass) passed++;
+
+            System.Console.WriteLine(
+                $"{i + 1,-4} {trace,-22} {resp?.CoverageStatus ?? "MISSING",-10} " +
+                $"{resp?.PlanName ?? "N/A",-14} {benefitTypeCode,-13} {resp?.BenefitDetails.Count ?? 0,-10} " +
+                $"{req?.RequestStatusCode ?? "UNCHANGED",-20} {(pass ? "✓" : "✗ FAIL")}");
+        }
+
+        System.Console.WriteLine(new string('-', 100));
+        System.Console.WriteLine($"\nResult: {passed}/{count} passed.");
+
+        if (passed < count)
+        {
+            System.Console.WriteLine("\nFailed checks per subscriber:");
+            for (int i = 0; i < subscribers.Count; i++)
+            {
+                var (trace, _, isActive, _, benefitTypeCode) = subscribers[i];
+                responsesByTrace.TryGetValue(trace, out var resp);
+                updatedRequests.TryGetValue(trace, out var req);
+
+                var failures = new List<string>();
+                if (resp is null)                                                        failures.Add("no response row created");
+                if (isActive  && resp?.CoverageStatus != "ACTIVE")                      failures.Add($"expected ACTIVE, got '{resp?.CoverageStatus}'");
+                if (!isActive && resp?.CoverageStatus == "ACTIVE")                      failures.Add("expected non-ACTIVE coverage");
+                if (req?.RequestStatusCode != "RESPONSE_RECEIVED")                      failures.Add($"request status still '{req?.RequestStatusCode}'");
+                if ((resp?.BenefitDetails.Count ?? 0) == 0)                             failures.Add("no benefit details saved");
+                if (!(resp?.BenefitDetails.Any(b => b.BenefitTypeCode == benefitTypeCode) ?? false))
+                                                                                         failures.Add($"benefit code '{benefitTypeCode}' not found on saved detail");
+
+                if (failures.Count > 0)
+                    System.Console.WriteLine($"  [{i + 1}] {trace}: {string.Join(", ", failures)}");
+            }
+        }
     }
 
     static async Task CreateSampleDataAsync(EligibilityDbContext context)
@@ -365,7 +549,7 @@ class Program
 
         foreach (var (requestId, content) in results)
         {
-            var fileName = $"270_{requestId}_{DateTime.Now:yyyyMMdd_HHmmss}.txt";
+            var fileName = $"270_{requestId}_{DateTime.Now:yyyyMMdd_HHmms}.txt";
             var filePath = Path.Combine(outputDir, fileName);
             await File.WriteAllTextAsync(filePath, content);
             System.Console.WriteLine($"  Request {requestId}: {filePath}");
