@@ -234,7 +234,7 @@ public class EligibilityDbContext : DbContext
         // Configure EligibilityResponse
         modelBuilder.Entity<EligibilityResponse>(entity =>
         {
-            entity.ToTable("eligibility_response");
+            entity.ToTable("eligibility_response", tb => tb.UseSqlOutputClause(false));
             entity.HasKey(e => e.ResponseId);
             entity.Property(e => e.ResponseId).HasColumnName("response_id").ValueGeneratedOnAdd();
             entity.Property(e => e.RequestId).HasColumnName("request_id").IsRequired();
